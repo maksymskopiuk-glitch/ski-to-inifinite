@@ -14,26 +14,163 @@ test('all languages contain the same keys',()=>{assert.equal(run('Object.keys(I1
 test('invalid saved selections and values are repaired',()=>{assert.equal(run('cleanSave({lang:"xx",coins:-50,volume:9,ownedRiders:["alien"],ownedGear:[]}).coins'),0);assert.equal(run('cleanSave({lang:"xx",volume:9}).volume'),1);assert.equal(run('cleanSave({ready:true}).ready'),false)});
 test('first setup awards exactly one rider and one board',()=>{run('choiceGender="female";choiceGear="board";$("start-adventure").onclick()');assert.equal(run('save.rider'),'female');assert.equal(run('save.gear'),'board-classic');assert.equal(run('save.ownedRiders.length'),1);assert.equal(run('save.ownedGear.length'),1);assert.equal(run('mode'),'playing')});
 test('setup cannot award another free set',()=>{run('choiceGender="male";choiceGear="ski";$("start-adventure").onclick()');assert.equal(run('save.rider'),'female');assert.equal(run('save.ownedRiders.length'),1)});
-test('jump rises and lands with fixed-step physics',()=>{run('startRun();requestJump();for(let i=0;i<30;i++)update(1/120)');assert.equal(run('player.grounded'),false);assert.ok(run('terrain(world+player.x)-player.y')>25);run('for(let i=0;i<120;i++)update(1/120)');assert.equal(run('player.grounded'),true)});
+test('jump rises and lands with fixed-step physics',()=>{run('startRun();requestJump();for(let i=0;i<30;i++)update(1/120)');assert.equal(run('player.grounded'),false);assert.ok(run('terrain(world+player.x)-player.y')>12);run('for(let i=0;i<120;i++)update(1/120)');assert.equal(run('player.grounded'),true)});
 test('coins increase the run total',()=>{run('startRun();entities=[{type:"coin",x:world+player.x,height:12}];update(1/120)');assert.equal(run('runCoins'),1);assert.equal(run('entities.some(e=>e.type==="coin"&&e.taken)'),false)});
 test('rock collision ends run and banks earnings only once',()=>{run('startRun();runCoins=7;score=90;world=900;player.y=terrain(world+player.x);entities=[{type:"rock",x:world+player.x}];update(1/120)');assert.equal(run('mode'),'crashed');assert.equal(run('save.coins'),7);run('saveRun();saveRun()');assert.equal(run('save.coins'),7);assert.ok(run('save.best')>=90);run('update(.8)');assert.equal(run('mode'),'gameover')});
-test('airborne rider clears collision box',()=>{run('startRun();player.grounded=false;player.y=terrain(world+player.x)-60;player.vy=0;entities=[{type:"rider",x:world+player.x,rider:0}];update(1/120)');assert.equal(run('mode'),'playing')});
+test('airborne rider clears collision box',()=>{run('startRun();player.grounded=false;player.y=terrain(world+player.x)-60;player.arcY=terrain(world+player.x)-120;player.vy=0;entities=[{type:"rider",x:world+player.x,rider:0}];update(1/120)');assert.equal(run('mode'),'playing')});
 test('ramps launch automatically',()=>{run('startRun();entities=[{type:"ramp",x:world+player.x,used:false}];update(1/120)');assert.equal(run('player.grounded'),false);assert.ok(run('player.vy')< -200)});
 test('pause stops score and movement',()=>{run('startRun();update(.1);pauseRun()');const before=run('world');run('for(let i=0;i<300;i++)update(1/120)');assert.equal(run('world'),before);assert.equal(run('mode'),'paused');run('resumeRun();update(.1)');assert.ok(run('world')>before)});
 test('score increases speed and remains capped',()=>{run('startRun();score=5000;update(1/120)');assert.ok(run('speed')>78);run('score=100000;update(1/120)');assert.equal(run('speed'),185)});
 test('purchases are affordable, persisted, and not charged twice',()=>{run('save.coins=99');assert.equal(run('purchase("ski-classic","gear")'),false);assert.equal(run('save.coins'),99);run('save.coins=200;purchase("ski-classic","gear")');assert.equal(run('save.coins'),100);assert.equal(run('save.gear'),'ski-classic');run('purchase("ski-classic","gear")');assert.equal(run('save.coins'),100);assert.ok(JSON.parse(store['ski-to-inifinite-v1']).ownedGear.includes('ski-classic'))});
 test('returning to menu saves coins without death',()=>{run('startRun();runCoins=4;pauseRun();goMenu()');assert.equal(run('save.coins'),104);assert.equal(run('mode'),'menu')});
-test('deterministic autoplayer survives and earns coins',()=>{run('startRun();let next;for(let i=0;i<120*65;i++){next=entities.filter(e=>!["coin","ramp"].includes(e.type)&&e.x-world>player.x).sort((a,b)=>a.x-b.x)[0];if(next&&player.grounded&&(next.x-world-player.x)<(speed-(next.type==="rider"?22:0))*.36+8)requestJump();update(1/120);if(mode!=="playing"){console.log(JSON.stringify({score,speed,y:player.y,ground:terrain(world+player.x),grounded:player.grounded,vy:player.vy,air:player.air,near:entities.filter(e=>Math.abs(e.x-world-player.x)<100)}));break}}');assert.equal(run('mode'),'playing');assert.ok(run('score')>480);assert.ok(run('runCoins')>10)});
-test('course remains jumpable at intermediate and maximum speed',()=>{for(const offset of [40000,90000]){run(`startRun();world=${offset};score=world/10;spawnAt=world+400;entities=[];player.y=terrain(world+player.x);for(let i=0;i<120*90;i++){const next=entities.filter(e=>!["coin","ramp"].includes(e.type)&&e.x-world>player.x).sort((a,b)=>a.x-b.x)[0];if(next&&player.grounded&&(next.x-world-player.x)<(speed-(next.type==="rider"?22:0))*.36+8)requestJump();update(1/120);if(mode!=="playing")break}`);assert.equal(run('mode'),'playing','at world offset '+offset)}});
+test('deterministic autoplayer survives and earns coins',()=>{run('startRun();let next;for(let i=0;i<120*65;i++){next=entities.filter(e=>!["coin","ramp"].includes(e.type)&&e.x-world>player.x).sort((a,b)=>a.x-b.x)[0];if(player.grounded)endJumpInput("test");if(next&&player.grounded&&(next.x-world-player.x)<(speed-(next.type==="rider"?22:0))*.5+8)beginJumpInput("test");update(1/120);if(mode!=="playing"){console.log(JSON.stringify({score,speed,y:player.y,ground:terrain(world+player.x),grounded:player.grounded,vy:player.vy,air:player.air,near:entities.filter(e=>Math.abs(e.x-world-player.x)<100)}));break}}');assert.equal(run('mode'),'playing');assert.ok(run('score')>480);assert.ok(run('runCoins')>10)});
+test('course remains jumpable at intermediate and maximum speed',()=>{for(const offset of [40000,90000]){run(`startRun();world=${offset};score=world/10;spawnAt=world+400;entities=[];player.y=terrain(world+player.x);for(let i=0;i<120*90;i++){const next=entities.filter(e=>!["coin","ramp"].includes(e.type)&&e.x-world>player.x).sort((a,b)=>a.x-b.x)[0];if(player.grounded)endJumpInput("test");if(next&&player.grounded&&(next.x-world-player.x)<(speed-(next.type==="rider"?22:0))*.5+8)beginJumpInput("test");update(1/120);if(mode!=="playing")break}`);assert.equal(run('mode'),'playing','at world offset '+offset)}});
 function trajectory(hold){return run(`(()=>{startRun();entities=[];spawnAt=1e9;const from=player.y;let peak=0,time=0;beginJumpInput('test');for(let i=0;i<480;i++){if(i/120>=${hold})endJumpInput('test');update(1/120);time+=1/120;peak=Math.max(peak,from-player.y);if(i>0&&player.grounded)break}return{peak,time}})()`)}
-test('longer holds produce progressively higher and longer jumps',()=>{const arcs=[0,.1,.2,.32].map(trajectory);for(let i=1;i<arcs.length;i++){assert.ok(arcs[i].peak>arcs[i-1].peak+5);assert.ok(arcs[i].time>arcs[i-1].time+.05)}assert.ok(arcs[3].peak>arcs[0].peak*1.6);console.log('  tap / full hold:',JSON.stringify([arcs[0],arcs[3]]))});
+test('longer holds produce progressively higher and longer jumps',()=>{const arcs=[0,.1,.2,.32].map(trajectory);for(let i=1;i<arcs.length;i++){assert.ok(arcs[i].peak>arcs[i-1].peak+2);assert.ok(arcs[i].time>arcs[i-1].time+.05)}assert.ok(arcs[3].peak>arcs[0].peak*1.6);console.log('  tap / full hold:',JSON.stringify([arcs[0],arcs[3]]))});
 test('holding has a cap and cannot cause infinite flight',()=>{const capped=trajectory(.33),long=trajectory(5);assert.equal(long.peak,capped.peak);assert.equal(long.time,capped.time);assert.ok(long.time<2)});
 test('holding through landing never jumps repeatedly',()=>{run('startRun();entities=[];spawnAt=1e9;beginJumpInput("key:Space");for(let i=0;i<360;i++)update(1/120)');assert.equal(run('player.grounded'),true);assert.equal(run('jumpBuffer'),0)});
 test('releasing then pressing in midair cannot restart lift',()=>{run('startRun();entities=[];spawnAt=1e9;beginJumpInput("key:Space");for(let i=0;i<18;i++)update(1/120);endJumpInput("key:Space");beginJumpInput("key:Space")');const held=run('player.holdTime');run('for(let i=0;i<12;i++)update(1/120)');assert.equal(run('player.holdTime'),held);assert.equal(run('player.holdActive'),false)});
-test('held jump clears a moving rider even with an early takeoff',()=>{run('startRun();entities=[{type:"rider",rider:0,x:player.x+57}];spawnAt=1e9;beginJumpInput("key:Space");for(let i=0;i<190;i++)update(1/120)');assert.equal(run('mode'),'playing');assert.ok(run('entities[0].x-world-player.x') < -25)});
+test('held jump clears a moving rider with the lower arc',()=>{run('startRun();entities=[{type:"rider",rider:0,x:player.x+44}];spawnAt=1e9;beginJumpInput("key:Space");for(let i=0;i<190;i++)update(1/120)');assert.equal(run('mode'),'playing');assert.ok(run('entities[0].x-world-player.x') < -25)});
 test('keyboard press and release use the real event handlers',()=>{run('startRun();entities=[];spawnAt=1e9');const event={code:'Space',target:{tagName:'CANVAS'},preventDefault(){},repeat:false};docEvents.keydown.forEach(fn=>fn(event));run('update(1/120)');assert.equal(run('player.holdActive'),true);docEvents.keyup.forEach(fn=>fn(event));assert.equal(run('jumpInputs.size'),0);assert.equal(run('player.holdActive'),false)});
 test('pointer capture and cancellation release a held touch',()=>{run('startRun()');const target=nodes.get('jump');target.listeners.pointerdown.forEach(fn=>fn({button:0,pointerId:7,preventDefault(){}}));assert.equal(target.capturedPointer,7);run('update(1/120)');assert.equal(run('player.holdActive'),true);docEvents.pointercancel.forEach(fn=>fn({pointerId:7}));assert.equal(run('jumpInputs.size'),0);assert.equal(run('player.holdActive'),false)});
 test('separate input releases preserve another active hold',()=>{run('startRun();beginJumpInput("key:Space");beginJumpInput("pointer:3");update(1/120);endJumpInput("pointer:3")');assert.equal(run('player.holdActive'),true);run('endJumpInput("key:Space")');assert.equal(run('player.holdActive'),false)});
 test('pause and lost focus clear inputs before resuming',()=>{run('startRun();beginJumpInput("key:Space");update(1/120)');windowEvents.blur.forEach(fn=>fn());assert.equal(run('mode'),'paused');assert.equal(run('jumpInputs.size'),0);run('resumeRun()');assert.equal(run('player.holdActive'),false)});
 test('coin chime has lower volume, pitch, soft attacks and a cooldown',()=>{const calls=[];sandbox.captureTone=(...args)=>calls.push(args);run('var originalTone=tone;var originalAudio=audio;tone=captureTone;audio={currentTime:10};lastCoinSound=-Infinity;sfx("coin");sfx("coin")');assert.equal(calls.length,2);assert.ok(calls.every(([freq,duration,type,level,delay,attack])=>freq<700&&type==='sine'&&level<=.11&&attack>=.025));run('audio.currentTime+=.1;sfx("coin")');assert.equal(calls.length,4);run('tone=originalTone;audio=originalAudio')});
+
+// Recorded from v1.2 on the same slopes at initial, intermediate and maximum speed.
+const previousFlights=[
+  {
+    "offset": 0,
+    "hold": 0,
+    "boost": 1,
+    "peak": 48.32803195508163,
+    "time": 0.9583333333333324,
+    "distance": 74.79617696579402
+  },
+  {
+    "offset": 0,
+    "hold": 0.1,
+    "boost": 1,
+    "peak": 61.828530878104885,
+    "time": 1.0916666666666652,
+    "distance": 85.20998773262178
+  },
+  {
+    "offset": 0,
+    "hold": 0.2,
+    "boost": 1,
+    "peak": 74.43365401493449,
+    "time": 1.2083333333333315,
+    "distance": 94.32355297693331
+  },
+  {
+    "offset": 0,
+    "hold": 0.32,
+    "boost": 1,
+    "peak": 88.92001083429678,
+    "time": 1.3499999999999976,
+    "distance": 105.39188345540573
+  },
+  {
+    "offset": 40000,
+    "hold": 0,
+    "boost": 1,
+    "peak": 58.445040633451924,
+    "time": 1.0416666666666654,
+    "distance": 135.507661940268
+  },
+  {
+    "offset": 40000,
+    "hold": 0.1,
+    "boost": 1,
+    "peak": 73.10299064970987,
+    "time": 1.166666666666665,
+    "distance": 151.780915954776
+  },
+  {
+    "offset": 40000,
+    "hold": 0.2,
+    "boost": 1,
+    "peak": 86.72093435475726,
+    "time": 1.2916666666666645,
+    "distance": 168.0568145736106
+  },
+  {
+    "offset": 40000,
+    "hold": 0.32,
+    "boost": 1,
+    "peak": 102.30680063923455,
+    "time": 1.441666666666664,
+    "distance": 187.59138439904928
+  },
+  {
+    "offset": 90000,
+    "hold": 0,
+    "boost": 1,
+    "peak": 52.7831729928339,
+    "time": 0.9416666666666658,
+    "distance": 174.20833333388146
+  },
+  {
+    "offset": 90000,
+    "hold": 0.1,
+    "boost": 1,
+    "peak": 66.4367256831438,
+    "time": 1.058333333333332,
+    "distance": 195.7916666672827
+  },
+  {
+    "offset": 90000,
+    "hold": 0.2,
+    "boost": 1,
+    "peak": 78.74063090261953,
+    "time": 1.1749999999999983,
+    "distance": 217.37500000068394
+  },
+  {
+    "offset": 90000,
+    "hold": 0.32,
+    "boost": 1,
+    "peak": 92.18541649568735,
+    "time": 1.3166666666666644,
+    "distance": 243.58333333409973
+  },
+  {
+    "offset": 0,
+    "hold": 0.32,
+    "boost": 1.2,
+    "peak": 120.45300902308101,
+    "time": 1.549999999999997,
+    "distance": 121.02123241360319
+  },
+  {
+    "offset": 40000,
+    "hold": 0.32,
+    "boost": 1.2,
+    "peak": 134.96290207399824,
+    "time": 1.6416666666666633,
+    "distance": 213.6434036599021
+  },
+  {
+    "offset": 90000,
+    "hold": 0.32,
+    "boost": 1.2,
+    "peak": 121.60648904853494,
+    "time": 1.549999999999997,
+    "distance": 286.7500000009022
+  }
+];
+test('height is halved while flight duration and distance match v1.2, including ramps',()=>{
+  for(const previous of previousFlights){
+    const actual=run(`(()=>{startRun();world=${previous.offset};score=world/10;entities=[];spawnAt=1e9;player.y=terrain(world+player.x);let peak=0,time=0;beginJumpInput('test');${previous.boost!==1?'doJump('+previous.boost+');':''}for(let i=0;i<480;i++){if(i/120>=${previous.hold})endJumpInput('test');update(1/120);time+=1/120;peak=Math.max(peak,terrain(world+player.x)-player.y);if(i>0&&player.grounded)break}return{peak,time,distance:world-${previous.offset}}})()`);
+    assert.ok(Math.abs(actual.peak-previous.peak*.5)<1e-8,JSON.stringify({previous,actual}));
+    assert.equal(actual.time,previous.time);
+    assert.equal(actual.distance,previous.distance);
+  }
+});
+test('collisions use the visible lower arc',()=>{
+  run('startRun();entities=[];spawnAt=1e9;beginJumpInput("test");update(1/120);player.arcY=terrain(world+player.x)-40;player.vy=0;entities=[{type:"rider",rider:0,x:world+player.x}];update(1/120)');
+  assert.equal(run('mode'),'crashed');
+});
+
 console.log(`${passed} meaningful game checks passed.`);
