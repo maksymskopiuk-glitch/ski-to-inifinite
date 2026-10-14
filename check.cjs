@@ -13,7 +13,7 @@ run(`function startTestRun(){startRun();courseSeed=7654321;player.y=player.arcY=
 function followCourse(seconds){for(let i=0;i<120*seconds;i++){
   const cue=entities.filter(e=>(e.type==='marker'||e.type==='ramp')&&!e.used&&e.x-world-player.x>-speed/60).sort((a,b)=>a.x-b.x)[0];
   if(player.grounded)endJumpInput('test');
-  if(cue&&cue.type==='marker'&&player.grounded&&cue.x-world-player.x<=speed/120){cue.used=true;beginJumpInput('test')}
+  if(cue&&(cue.type==='marker'||cue.type==='ramp')&&player.grounded&&cue.x-world-player.x<=speed/120){cue.used=true;beginJumpInput('test')}
   update(1/120);if(mode!=='playing')break;
 }}`);
 test('fresh save has no unearned items or money',()=>{assert.equal(run('save.ready'),false);assert.equal(run('save.coins'),0);assert.equal(run('save.ownedRiders.length+save.ownedGear.length'),0)});
@@ -25,7 +25,7 @@ test('jump rises and lands with fixed-step physics',()=>{run('startTestRun();req
 test('coins increase the run total',()=>{run('startTestRun();entities=[{type:"coin",x:world+player.x,height:12}];update(1/120)');assert.equal(run('runCoins'),1);assert.equal(run('entities.some(e=>e.type==="coin"&&e.taken)'),false)});
 test('rock collision ends run and banks earnings only once',()=>{run('startTestRun();runCoins=7;score=90;world=900;player.y=terrain(world+player.x);entities=[{type:"rock",x:world+player.x}];update(1/120)');assert.equal(run('mode'),'crashed');assert.equal(run('save.coins'),7);run('saveRun();saveRun()');assert.equal(run('save.coins'),7);assert.ok(run('save.best')>=90);run('update(.8)');assert.equal(run('mode'),'gameover')});
 test('airborne rider clears collision box',()=>{run('startTestRun();player.grounded=false;player.y=terrain(world+player.x)-60;player.arcY=terrain(world+player.x)-120;player.vy=0;entities=[{type:"rider",x:world+player.x,rider:0}];update(1/120)');assert.equal(run('mode'),'playing')});
-test('ramps launch automatically',()=>{run('startTestRun();entities=[{type:"ramp",x:world+player.x,used:false}];update(1/120)');assert.equal(run('player.grounded'),false);assert.ok(run('player.vy')< -200)});
+test('small rises never jump automatically but accept manual jumps',()=>{run('startTestRun();spawnAt=1e9;entities=[];courseRamps=[player.x+40];for(let i=0;i<120;i++){update(1/120);if(!player.grounded)throw Error("Automatic jump")}');run('startTestRun();spawnAt=1e9;entities=[{type:"ramp",x:player.x+3}];courseRamps=[player.x+12];beginJumpInput("test");update(1/120)');assert.equal(run('player.grounded'),false);assert.ok(run('player.vy')<0)});
 test('pause stops score and movement',()=>{run('startTestRun();update(.1);pauseRun()');const before=run('world');run('for(let i=0;i<300;i++)update(1/120)');assert.equal(run('world'),before);assert.equal(run('mode'),'paused');run('resumeRun();update(.1)');assert.ok(run('world')>before)});
 test('speed increases by exactly 0.1x at each 100-point boundary',()=>{for(const [points,multiple] of [[0,1],[99.99,1],[100,1.1],[199.99,1.1],[200,1.2],[1000,2],[3000,4],[10000,11]]){assert.ok(Math.abs(run('speedForScore('+points+')')-78*multiple)<1e-9)}run('startTestRun();entities=[];spawnAt=1e9;world=999.8;score=world/10;update(1/120)');assert.equal(nodes.get('speed').textContent,'1.1×')});
 test('purchases are affordable, persisted, and not charged twice',()=>{run('save.coins=99');assert.equal(run('purchase("ski-classic","gear")'),false);assert.equal(run('save.coins'),99);run('save.coins=200;purchase("ski-classic","gear")');assert.equal(run('save.coins'),100);assert.equal(run('save.gear'),'ski-classic');run('purchase("ski-classic","gear")');assert.equal(run('save.coins'),100);assert.ok(JSON.parse(store['ski-to-inifinite-v1']).ownedGear.includes('ski-classic'))});
@@ -77,4 +77,8 @@ test('low jump height remains unchanged on a flat slope',()=>{
   try{const full=trajectory(.32);assert.ok(full.peak>43&&full.peak<48);assert.ok(full.time>1.3&&full.time<1.45)}finally{run('terrain=realTerrain')}
 });
 
+test('five random tricks stay fixed in flight, finish upright and preserve physics',()=>{
+ const seen=new Set();for(let n=0;n<80;n++){run('startTestRun();entities=[];spawnAt=1e9;beginJumpInput("test");update(1/120)');const kind=run('player.trick');seen.add(kind);run('for(let i=0;i<25;i++)update(1/120)');assert.equal(run('player.trick'),kind)}assert.equal(seen.size,5);
+ for(let kind=0;kind<5;kind++){run('player.grounded=false;player.air=.8;player.trick='+kind);const pose=run('trickPose()');assert.ok(Math.abs(Math.sin(pose.angle))<1e-8);assert.ok(Math.abs(pose.sx-1)<1e-8);assert.ok(Math.abs(pose.bend)<1e-8)}
+});
 console.log(`${passed} meaningful game checks passed.`);
